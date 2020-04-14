@@ -1,0 +1,189 @@
+SLIDE 1 - QUESTION SET 2 - QUESTION 1
+
+Question:
+
+We want to find out how the two stores compare in their count of rental orders during every month for all 
+the years we have data for. Write a query that returns the store ID for the store, the year and month and 
+the number of rental orders each store has fulfilled for that month. Your table should include a column for 
+each of the following: year, month, store ID and count of rental orders fulfilled during that month.
+
+Query:
+
+/*Divides the total rentals in year/month/store groups and counts the number
+of rentals per group */
+SELECT 
+	DATE_PART('year', r.rental_date) AS year,
+	DATE_PART('month', r.rental_date) AS month,
+	str.store_id, 
+	COUNT(*) AS rental_count
+FROM rental r
+JOIN staff stf
+ON stf.staff_id = r.staff_id
+JOIN store str
+ON str.store_id = stf.store_id
+GROUP BY str.store_id, year, month
+ORDER BY year, month, str.store_id
+
+
+
+
+
+
+
+SLIDE 2 - QUESTION SET 2 - QUESTION 2
+
+Question:
+
+We would like to know who were our top 10 paying customers, how many payments they made on a monthly basis during 2007,
+ and what was the amount of the monthly payments. Can you write a query to capture the customer name, month and year of 
+payment, and total payment amount for each month by these top 10 paying customers?
+
+
+Query:
+
+WITH top_ten_clients AS
+(/*Find the all time highest paying 10 customers*/
+SELECT
+	c.customer_id,
+	c.first_name || ' ' || c.last_name AS full_name,
+	SUM(p.amount) AS total_payment_amount
+FROM customer c
+JOIN payment p
+ON c.customer_id = p.customer_id
+GROUP BY c.customer_id, full_name
+ORDER BY total_payment_amount DESC
+LIMIT 10)
+
+/*Shows payment count and total payed per month
+for top 10 customers*/
+SELECT
+	DATE_TRUNC('month', p.payment_date) AS month,
+	top.full_name as customer_name,
+	COUNT(*) AS payment_count,
+	SUM(p.amount) AS amount_paid_month
+FROM payment p
+JOIN top_ten_clients top
+ON top.customer_id = p.customer_id
+GROUP BY month, customer_name
+ORDER BY customer_name
+
+
+
+
+
+
+
+SLIDE 3 - QUESTION SET 2 - QUESTION 3
+
+Question:
+
+Finally, for each of these top 10 paying customers, I would like to find out the difference
+ across their monthly payments during 2007. Please go ahead and write a query to compare the
+ payment amounts in each successive month. Repeat this for each of these 10 paying customers. 
+Also, it will be tremendously helpful if you can identify the customer name who paid the most 
+difference in terms of payments.
+
+Query:
+
+WITH top_ten_clients AS
+(/*Find the all time highest paying 10 customers*/
+SELECT
+	c.customer_id,
+	c.first_name || ' ' || c.last_name AS full_name,
+	SUM(p.amount) AS total_payment_amount
+FROM customer c
+JOIN payment p
+ON c.customer_id = p.customer_id
+GROUP BY c.customer_id, full_name
+ORDER BY total_payment_amount DESC
+LIMIT 10)
+
+/*Shows payment count and total payed per month
+for top 10 customers*/
+SELECT
+	DATE_TRUNC('month', p.payment_date) AS month,
+	top.full_name as customer_name,
+	COUNT(*) AS payment_count,
+	SUM(p.amount) AS amount_paid_month,
+	/* Difference between what they paid this month vs last month
+	for each customer */
+	SUM(p.amount) - (LAG(SUM(p.amount)) OVER(PARTITION BY top.full_name)) AS diff_with_last_month
+FROM payment p
+JOIN top_ten_clients top
+ON top.customer_id = p.customer_id
+/* The month 05/2007 is incomplete so we exclude it to avoid
+having big negative and non representativevalues in diff_with_last_month 
+for all customers for that month */
+WHERE DATE_TRUNC('month', p.payment_date) BETWEEN '2007-02-01' AND '2007-04-01'
+GROUP BY month, customer_name
+ORDER BY customer_name
+
+
+
+
+
+
+
+SLIDE 4 - QUESTION SET 1 - QESTION 1 modified
+
+Question:
+
+How many movies are there for each Family-friendly category (Animation, Children, Classics, Comedy, Family and Music)?
+Hoy many rentals are there for each category? (Total rentals)
+What is the most popular (by number of rentals) family-friendly movie?
+What is the most popular family-friendly category?
+
+Query:
+
+Part 1:
+ 
+/* First we will find the total number of rentals for each movie in the
+category to see the most popular one */
+
+SELECT 
+	f.title AS film_title,
+	cat.name AS category,
+	COUNT(*) as rental_count
+FROM rental r
+JOIN inventory i
+ON r.inventory_id = i.inventory_id
+JOIN film f
+ON f.film_id = i.film_id
+JOIN film_category flcat
+ON f.film_id = flcat.film_id
+JOIN category cat
+ON flcat.category_id = cat.category_id
+WHERE cat.name IN ('Animation', 'Children', 'Classics', 'Comedy', 'Family', 'Music')
+GROUP BY film_title, category
+ORDER BY rental_count DESC
+LIMIT 15;
+
+Part 2:
+
+/* We use the previous Query (without limit) as a subquery to find the total rentals per
+category */
+
+WITH rentals_per_movie AS (
+	SELECT 
+		f.title AS film_title,
+		cat.name AS category,
+		COUNT(*) as rental_count
+	FROM rental r
+	JOIN inventory i
+	ON r.inventory_id = i.inventory_id
+	JOIN film f
+	ON f.film_id = i.film_id
+	JOIN film_category flcat
+	ON f.film_id = flcat.film_id
+	JOIN category cat
+	ON flcat.category_id = cat.category_id
+	WHERE cat.name IN ('Animation', 'Children', 'Classics', 'Comedy', 'Family', 'Music')
+	GROUP BY film_title, category
+	ORDER BY rental_count DESC)
+SELECT
+	category,
+	SUM(rental_count) AS total_rentals,
+	RANK() OVER (ORDER BY SUM(rental_count) DESC)  AS rank
+FROM rentals_per_movie
+GROUP BY category
+ORDER BY rank
